@@ -5,7 +5,9 @@ from transformers import (
     pipeline,
 )
 import torch
-from retriver import query_api
+from retriver import distance_api, token_api
+from classifier import classifier_model
+import json
 
 # ----------------------> LOADUP MODEL <---------------------- #
 def load_fine_tuned_model(model_id):
@@ -35,7 +37,15 @@ def load_fine_tuned_model(model_id):
 
 # ----------------------> INFERENCE <---------------------- #
 def inference(model, tokenizer, user_input):
-    context = query_api(user_input)
+    classification = classifier_model(user_input)
+    if classification["category"] == "token":
+        token_address = classification["token_address"]
+        token_results = token_api(token_address)
+        context = token_results
+
+    else:
+        context = distance_api(user_input)
+
     messages = [
         {"role": "system", 
          "content": "You are a crypto market expert that gives informative answers to user questions based on the context. You can be wrong but you have to be decisive"
@@ -49,8 +59,9 @@ def inference(model, tokenizer, user_input):
             User Question:
             {user_input} 
             
-            **NOTE**:
+            **NOTE:**
               - Strictly follow the context and answer the user question.
+              - If you are suggesting any numbers, make sure they are accurate and include it in the answer.
             """
         }
     ]
@@ -65,7 +76,7 @@ def inference(model, tokenizer, user_input):
         device_map="auto",
     )
 
-    outputs = pipe(prompt, max_new_tokens=512, do_sample=False, temperature=0.7, top_k=50, top_p=0.95)
+    outputs = pipe(prompt, max_new_tokens=512, do_sample=True, temperature=0.8, top_k=250, top_p=0.95)
     response = outputs[0]["generated_text"]
 
     return response.split("assistant")[-1]
